@@ -43,8 +43,12 @@ export async function getGPTResponse(prompt: string, systemPrompt?: string): Pro
     // Ensure the response is split into lines if needed, or handle multi-line responses appropriately
     const responseLines = output ? output.split('\n') : [];
     return output ? [`🤖 SIGMA Response:`, ...responseLines] : ['⚠️ No response from SIGMA.'];
-  } catch (err: any) {
+  } catch (err: unknown) {
      console.error("Error contacting OpenAI API:", err);
-     return [`❌ Error contacting SIGMA: ${err.message}`];
+     if (err instanceof Error) {
+        return [`❌ Error contacting SIGMA: ${err.message}`];
+     } else {
+        return [`❌ Error contacting SIGMA: An unknown error occurred.`];
+     }
   }
 } 

@@ -8,7 +8,7 @@ export type Mission = {
   completed: boolean;
 };
 
-let missions: Mission[] = [
+const missions: Mission[] = [
   {
     id: 1,
     title: 'Hello Module',
