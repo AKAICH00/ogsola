@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "trigger": "run mission 1",
+    "enabled": true,
+    "persona": "grumpy retro AI",
+    "mode": "hint",
+    "unlocks": ["theme_amber"]
+  },
+  {
+    "id": 2,
+    "trigger": "ask how do I build a game",
+    "enabled": true,
+    "persona": "mentor",
+    "mode": "guide",
+    "unlocks": ["mission3"]
+  },
+  {
+    "id": "secret_lore",
+    "trigger": "ask what happened to the original devs",
+    "enabled": true,
+    "persona": "oracle",
+    "mode": "lore",
+    "unlocks": []
+  }
+] 
