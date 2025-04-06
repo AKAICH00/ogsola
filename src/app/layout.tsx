@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OG Sola // Abstract Terminal",
-  description: "Enter the abstract terminal interface for OG Sola, author of Fortune Genesis.",
+  title: "OG SOLAS OS V0.11",
+  description: "Loading OG SOLAS OS V0.11 on Abstract Chain...",
 };
 
 export default function RootLayout({
