@@ -6,59 +6,37 @@ import Head from 'next/head';
 import { useTheme } from '@/hooks/useTheme';
 import { findTheme, Theme, themes } from '@/lib/themes';
 import { handleCommand as processCommand } from '@/lib/commands';
-import type { Game, GameState } from '@/games/types';
-import { getGame, allGames, sortGameList } from '@/games';
-import GameCanvas from '@/components/terminal/game/GameCanvas';
-import { createEmptyKeyState, handleKeyDown, handleKeyUp, KeyState } from '@/lib/gameEngine';
+import type { Game } from '@/games/types';
+import { getGame, gameList } from '@/games';
+import GameCanvas from '@/components/GameCanvas';
+import { mapThemeToCanvasStyle } from '@/lib/canvasStyles';
 
-type GameMode = 'command' | 'game-prestart' | 'game-countdown' | 'game-playing' | 'game-over' | 'learn' | 'build' | 'gallery' | 'tips' | 'game-canvas';
+type GameMode = 'command' | 'learn' | 'build' | 'gallery' | 'tips' | 'game-canvas';
 
 export default function Home() {
   const [selectedTheme, setTheme] = useTheme();
   const [commandLog, setCommandLog] = useState<string[]>(["OG Solas OS v0.11"]);
   const [currentCommand, setCurrentCommand] = useState('');
   const [currentGameId, setCurrentGameId] = useState<string | null>(null);
-  const [currentGame, setCurrentGame] = useState<Game | null>(null);
   const [gameMode, setGameMode] = useState<GameMode>('command');
-  const [_gameModeSelected, setGameModeSelected] = useState<'single' | 'multi'>('single');
-  const [gameState, setGameState] = useState<GameState | null>(null);
-  const [keyState, setKeyState] = useState<any>(null);
   const [_leaderboard, setLeaderboard] = useState<{ address: string; xp: number }[]>([]);
   const [_unlockedStories, _setUnlockedStories] = useState<number[]>([]);
   const [userHandle, setUserHandle] = useState<string | null>(null);
   const [isWaitingForHandle, setIsWaitingForHandle] = useState(false);
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [countdown, setCountdown] = useState<number | null>(null);
-  const gameLoopIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const activeGameRef = useRef<Game | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [textBrightness, setTextBrightness] = useState<number>(100);
   const [dynamicTextColor, setDynamicTextColor] = useState<string | null>(null);
   const brightnessTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [showBrightnessIndicator, setShowBrightnessIndicator] = useState(false);
   const [isClient, setIsClient] = useState(false);
   const logContainerRef = useRef<HTMLPreElement>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  // --- Voting State ---
-  const [gameVotes, setGameVotes] = useState<{ [id: string]: number }>(() => {
-    if (typeof window !== 'undefined') {
-      const savedVotes = localStorage.getItem('gameVotes');
-      return savedVotes ? JSON.parse(savedVotes) : {};
-    }
-    return {};
-  });
-  const [sortedGameList, setSortedGameList] = useState<Game[]>(() => sortGameList(allGames, gameVotes));
-
-  // Load user handle from localStorage on initial render
   useEffect(() => {
-    // Only run in browser environment
     if (typeof window !== 'undefined') {
       const savedHandle = localStorage.getItem('userHandle');
       if (savedHandle) {
         setUserHandle(savedHandle);
-        // Add personalized greeting if handle exists
         setCommandLog(prevLog => [
           ...prevLog,
           `Welcome back, ${savedHandle}! Type 'help' to see available commands.`
@@ -67,19 +45,16 @@ export default function Home() {
     }
   }, []);
 
-  // Scroll to bottom of terminal in command mode
   useEffect(() => {
     if (gameMode === 'command' && logContainerRef.current) {
       logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
     }
   }, [commandLog, gameMode]);
 
-  // Focus input
   useEffect(() => {
     inputRef.current?.focus();
   }, [gameMode]);
 
-  // Load saved brightness from localStorage on initial render
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedBrightness = localStorage.getItem('terminal-brightness');
@@ -89,7 +64,6 @@ export default function Home() {
     }
   }, []);
 
-  // Effect to update dynamic color when theme or brightness changes
   useEffect(() => {
     const factor = textBrightness / 100;
     const [rBase, gBase, bBase] = selectedTheme.baseTextColorRGB;
@@ -98,21 +72,18 @@ export default function Home() {
     const b = Math.min(Math.round(bBase * factor), 255);
     setDynamicTextColor(`rgb(${r}, ${g}, ${b})`);
 
-    // Save brightness to localStorage
     if (typeof window !== 'undefined') {
       localStorage.setItem('terminal-brightness', textBrightness.toString());
     }
 
-    // Show indicator when brightness changes
     setShowBrightnessIndicator(true);
     if (brightnessTimeoutRef.current) {
         clearTimeout(brightnessTimeoutRef.current);
     }
     brightnessTimeoutRef.current = setTimeout(() => {
         setShowBrightnessIndicator(false);
-    }, 2000); // Match the original example's 2000ms timeout
+    }, 2000);
 
-    // Cleanup timeout on unmount or when dependencies change
     return () => {
         if (brightnessTimeoutRef.current) {
             clearTimeout(brightnessTimeoutRef.current);
@@ -120,24 +91,18 @@ export default function Home() {
     };
   }, [textBrightness, selectedTheme]);
 
-  // Simplified wheel handler to match original example
   const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    // Only adjust brightness in command mode
     if (gameMode === 'command') {
-        event.preventDefault(); // Prevent page scroll
+        event.preventDefault();
       
-        // Directly check wheel direction (matches original example)
         if (event.deltaY < 0) {
-            // Scrolling up - increase brightness
             setTextBrightness(prev => Math.min(prev + 5, 150));
         } else {
-            // Scrolling down - decrease brightness
             setTextBrightness(prev => Math.max(prev - 5, 30));
         }
     }
   };
 
-  // Helper function to list available themes
   const getThemeList = (): string[] => {
     const themeListOutput: string[] = ['Available Themes:'];
     themes.forEach((theme, index) => {
@@ -148,187 +113,48 @@ export default function Home() {
     return themeListOutput;
   };
 
-  // Game loop
-  const startGameLoop = useCallback(() => {
-    const game = activeGameRef.current;
-    if (!game) return;
-    
-    console.log("[DEBUG] Starting game loop with game:", game.name);
-    
-    if (gameLoopIntervalRef.current) {
-      clearInterval(gameLoopIntervalRef.current);
-    }
-    
-    gameLoopIntervalRef.current = setInterval(() => {
-      setGameState((prevState: GameState | null) => {
-        if (!prevState || !game) return prevState;
-        const newState = game.update(prevState, '__tick__');
-        
-        // Check for game over
-        if (game.isOver(newState)) {
-          console.log('[DEBUG] Game over detected in interval');
-          if (gameLoopIntervalRef.current) clearInterval(gameLoopIntervalRef.current);
-          setGameMode('game-over');
-          // Ensure focus returns to input after game over
-          setTimeout(() => inputRef.current?.focus(), 10);
-          
-          // Rest of game over logic
-          if ('playerScore' in newState && typeof newState.playerScore === 'number' && newState.playerScore >= 3) {
-            fetch('/api/xp/add', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ amount: 10 })
-            }).then(() => {
-              console.log('Added XP for winning game!');
-            }).catch(error => {
-              console.error('Failed to add XP:', error);
-            });
-          }
-        }
-        
-        return newState;
-      });
-    }, 500); // Half-second updates for smooth gameplay
-    
-    return () => {
-      if (gameLoopIntervalRef.current) {
-        clearInterval(gameLoopIntervalRef.current);
-      }
-    };
-  }, []);
-
-  // Countdown before game start
-  const startCountdown = useCallback(() => {
-    setGameMode('game-countdown');
-    setCountdown(3);
-    let count = 3;
-    const countdownInterval = setInterval(() => {
-      count--;
-      setCountdown(count);
-      if (count <= 0) {
-        clearInterval(countdownInterval);
-        setCountdown(null);
-        const game = activeGameRef.current;
-        if (game) {
-          const initialState = game.init();
-          setGameState(initialState);
-          console.log("[DEBUG] Initialized currentGameState:", initialState);
-          setGameMode('game-playing');
-          // Ensure focus is maintained after countdown
-          setTimeout(() => inputRef.current?.focus(), 10);
-        }
-      }
-    }, 1000);
-  }, []);
-
-  // Start game loop when in game-playing mode
-  useEffect(() => {
-    if (gameMode === 'game-playing' && gameState) {
-      startGameLoop();
-    } else {
-      if (gameLoopIntervalRef.current) {
-        clearInterval(gameLoopIntervalRef.current);
-        gameLoopIntervalRef.current = null;
-      }
-    }
-    return () => {
-      if (gameLoopIntervalRef.current) {
-        clearInterval(gameLoopIntervalRef.current);
-        gameLoopIntervalRef.current = null;
-      }
-    };
-  }, [gameMode, startGameLoop, gameState]);
-
-  // Exit game mode
   const exitGameMode = useCallback(() => {
-    // Stop ASCII game loop
-    if (gameLoopIntervalRef.current) {
-      clearInterval(gameLoopIntervalRef.current);
-      gameLoopIntervalRef.current = null;
-    }
-    // Note: Canvas engine stopping is now handled by GameCanvas unmount
-    // Reset common state
     setGameMode('command');
-    setCurrentGameId(null); // Clear current game ID
-    setGameState(null);
-    setCountdown(null);
-    activeGameRef.current = null;
-    setGameModeSelected('single');
+    setCurrentGameId(null);
     setTimeout(() => inputRef.current?.focus(), 0);
   }, []);
 
-  // Handle keyboard input
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     const key = e.key.toLowerCase();
 
-    // Quit logic (available in most game modes)
-    if ((gameMode === 'game-prestart' || gameMode === 'game-countdown' || gameMode === 'game-playing') && key === 'q') {
-      e.preventDefault();
-      setCommandLog(prevLog => [...prevLog, "> Game aborted."]);
-      exitGameMode();
-      return;
+    if (key === 'backspace' && e.target === inputRef.current) {
+       // Allow backspace default behavior within the input
+    } else if (key === 'backspace') {
+       e.preventDefault(); // Prevent navigation if focus is elsewhere
     }
 
-    // Add Escape for learn/tips mode
-    if ((gameMode === 'learn' || gameMode === 'tips') && key === 'escape') {
-      e.preventDefault();
-      setGameMode('command');
-      return;
-    }
-
-    if (gameMode === 'command' && key === 'enter') {
-      runTerminalCommand();
-    } else if (gameMode === 'game-prestart' && key === ' ') {
-      e.preventDefault();
-      startCountdown();
-    } else if (gameMode === 'game-playing') {
-      e.preventDefault();
-      const game = activeGameRef.current;
-      if ((key === 'w' || key === 's' || key === 'arrowup' || key === 'arrowdown') && game) {
-        setGameState((prevState: GameState | null) => prevState ? game.update(prevState, key) : null);
-      }
-    } else if (gameMode === 'game-over') {
-      e.preventDefault();
-      if (key === ' ') { // Play again
-        startGameLoop();
-      }
-      if (key === 'q') { // Quit to menu
-        setCommandLog(prevLog => [...prevLog, "> Exited game results."]);
-        exitGameMode();
-      }
-    } else if (gameMode === 'learn' || gameMode === 'gallery' || gameMode === 'tips') {
-      if (key === 'escape') setGameMode('command');
-      // Comment out builder/gallery specific key handling
-      /*
-      if (gameMode === 'gallery' && key >= '1' && key <= '9') {
-        const index = parseInt(key) - 1;
-        if (userGames && index < userGames.length) { 
-          const gameId = userGames[index].id;
-          setGalleryVotes(prev => ({ ...prev, [gameId]: (prev[gameId] || 0) + 1 }));
+    if (gameMode === 'command') {
+      if (key === 'enter') {
+        e.preventDefault();
+        if (currentCommand.trim() !== '' && !isProcessing) {
+          runTerminalCommand();
+          setCurrentCommand('');
         }
-      } else if (gameMode === 'build') { 
-        if (key === 'escape') setGameMode('command');
-        if (key === 'enter' && customGameName) {
-          const newGame: Game = { 
-              ...GameBuilderTemplate, 
-              id: `custom-${customGameName.toLowerCase().replace(/\s+/g, '-')}`,
-              name: `Custom: ${customGameName}` 
-          }; 
-          if (userGames) { userGames.push(newGame); }
-          setGalleryVotes(prev => ({ ...prev, [newGame.id]: 0 }));
-          setCustomGameName('');
-          setGameMode('command');
-        } else if (key.length === 1) {
-           // Handle typing game name - needs more robust implementation
+      } else if (key === 'arrowup') {
+        e.preventDefault();
+        // TODO: Implement command history
+      } else if (key === 'arrowdown') {
+        e.preventDefault();
+        // TODO: Implement command history
+      } else if (key === 'c' && e.ctrlKey) {
+        e.preventDefault();
+        setCommandLog(prevLog => [...prevLog, '> ^C']);
+        setIsProcessing(false);
+      }
+    } else if (gameMode === 'learn' || gameMode === 'gallery' || gameMode === 'tips' || gameMode === 'build') {
+        if (key === 'escape') {
+            e.preventDefault();
+            setGameMode('command');
+            setTimeout(() => inputRef.current?.focus(), 0);
         }
-      } 
-      */
-    } else if (gameMode !== 'command' && key !== 'shift' && key !== 'control' && key !== 'alt' && key !== 'meta') {
-      e.preventDefault();
     }
   };
 
-  // Command mode sections
   const _renderMenu = () => {
     const title = `
   ╔════════════════════════════════════════════════════╗
@@ -372,12 +198,6 @@ export default function Home() {
     return tutorial;
   };
 
-  // Comment out render functions using userGames/builder state
-  /*
-  const renderBuilderMode = () => { ... };
-  const renderGallery = () => { ... };
-  */
-
   const renderBuilderTips = () => {
     const tips = `
   ╔════════════════════════════════════════════════════╗
@@ -408,9 +228,7 @@ export default function Home() {
     `).join('\n');
   };
 
-  // --- Helper to render just the title box ---
   const renderTitleBox = () => {
-    // Add some top margin to the title box
     return (
       <pre className="relative z-30 mb-4 flex-shrink-0">
         {`
@@ -423,16 +241,12 @@ export default function Home() {
     );
   };
 
-  // Add document-level key event handling to maintain focus
   useEffect(() => {
-    // Global keyboard handler
     const globalKeyHandler = (e: KeyboardEvent) => {
-      // Don't interfere with typing in the input
       if (document.activeElement === inputRef.current) {
         return;
       }
       
-      // Refocus the input on any key press if it's not focused
       inputRef.current?.focus();
     };
 
@@ -442,22 +256,19 @@ export default function Home() {
     };
   }, []);
 
-  // Improve existing focus effect to be more aggressive
   useEffect(() => {
-    // Focus the input field whenever modes change
     inputRef.current?.focus();
-  }, [gameMode, isWaitingForHandle, isProcessing, countdown]);
+  }, [gameMode, isWaitingForHandle, isProcessing]);
 
-  // --- NEW: Help Text Function ---
   const renderHelpText = (): string[] => {
     return [
       'OG Solas OS - Available Commands:',
       '----------------------------------',
       '  start          - Begin the OG Solas experience (if not done). ',
       '  rename         - Change your user handle.',
-      '  list games     - Show available games and their types (ASCII/Canvas).',
-      '  run game <id>  - Start a game by its ID or number from the list.',
-      "                 (e.g., 'run game 1', 'run game abstract-pong')",
+      '  list games     - Show available canvas games.',
+      '  run game <id>  - Start a canvas game by its ID or number.',
+      "                 (e.g., 'run game 1', 'run game brick-breaker')",
       "  set theme <name> - Change the terminal theme (e.g., 'green', 'amber', 'blue').",
       '  theme list     - Show available themes.',
       '  clear          - Clear the terminal screen.',
@@ -466,18 +277,12 @@ export default function Home() {
       '  tips           - View game builder tips (Press ESC to exit).',
       '  help           - Show this help message.',
       ' ',
-      'During ASCII Games:',
-      '  [W/S] or [Arrows] - Control paddles/player.',
-      '  [Q]            - Quit the current game.',
-      'During Canvas Games (like Brick Breaker):',
-      '  [A/D] or [Arrows]- Control paddle.',
-      '  [P]            - Pause/Resume the game.',
-      '  [Q]            - Quit the current game.',
+      'During Canvas Games:',
+      '  [Q]            - Quit the current game (usually).',
+      '  (Other controls depend on the specific game)'
     ];
   };
-  // --- End Help Text Function ---
 
-  // Add a blinking cursor style for the terminal
   const cursorStyle = {
     display: 'inline-block',
     width: '8px',
@@ -488,7 +293,6 @@ export default function Home() {
     marginLeft: '2px'
   };
 
-  // Add the keyframes for the cursor animation
   const keyframes = `
     @keyframes blink {
       0%, 50% { opacity: 1; }
@@ -496,7 +300,6 @@ export default function Home() {
     }
   `;
 
-  // Handle terminal commands
   const runTerminalCommand = async () => {
     const command = currentCommand.trim();
     if (command === '' || isProcessing || gameMode !== 'command') return;
@@ -504,9 +307,7 @@ export default function Home() {
     setCurrentCommand('');
     setCommandLog((prevLog) => [...prevLog, `${command}`]);
 
-    // Handle waiting for user handle input
     if (isWaitingForHandle) {
-      // Save handle to state and localStorage
       setUserHandle(command);
       if (typeof window !== 'undefined') {
         localStorage.setItem('userHandle', command);
@@ -575,13 +376,16 @@ export default function Home() {
 
     // Handle 'list games' command
     if (commandLower === 'list games') {
-      const gameListOutput: string[] = ['Available Games:'];
-      sortedGameList.forEach((game, index) => {
-        const voteCount = game.name.includes("(Coming Soon)") ? `(${(gameVotes[game.id] || 0)})` : '';
-        gameListOutput.push(`  ${index + 1}. ${game.id.padEnd(15)} ${voteCount.padEnd(5)} ${game.name}`);
-      });
+      const gameListOutput: string[] = ['Available Canvas Games:'];
+      if (gameList.length === 0) {
+        gameListOutput.push('  (No canvas games installed yet)');
+      } else {
+        gameList.forEach((game, index) => {
+          gameListOutput.push(`  ${index + 1}. ${game.id.padEnd(25)} ${game.name}`);
+        });
+      }
       gameListOutput.push(" ");
-      gameListOutput.push("Run using 'run game <id_or_number>' | Vote using 'vote game <id_or_number>'");
+      gameListOutput.push("Run using 'run game <id_or_number>'");
       setCommandLog(prevLog => [...prevLog, ...gameListOutput]);
       setIsProcessing(false);
       return;
@@ -594,52 +398,28 @@ export default function Home() {
       return;
     }
 
-    // Handle 'vote game' command
-    const voteMatch = commandLower.match(/^vote game (.+)$/);
-    if (voteMatch) {
-      const identifier = voteMatch[1];
-      const gameToVote = getGame(identifier, sortedGameList);
-
-      if (gameToVote && gameToVote.name.includes("(Coming Soon)")) {
-        setGameVotes(prev => ({
-          ...prev,
-          [gameToVote.id]: (prev[gameToVote.id] || 0) + 1
-        }));
-        setCommandLog(prev => [...prev, `⚡ Vote registered for ${gameToVote.name}`]);
-      } else if (gameToVote) {
-        setCommandLog(prev => [...prev, `❌ Cannot vote for already available game: ${gameToVote.name}`]);
-      } else {
-        setCommandLog(prev => [...prev, `❌ Game not found: ${identifier}`]);
-      }
-      setIsProcessing(false);
-      return;
-    }
-
-    const gameMatch = commandLower.match(/^run game (.+)(?: (single|multi))?$/);
+    const gameMatch = commandLower.match(/^run game (.+)$/);
     if (gameMatch) {
       const gameId = gameMatch[1];
-      const gameModeArg = gameMatch[2] as 'single' | 'multi' | undefined;
-      const game = getGame(gameId, sortedGameList);
+      const game = getGame(gameId);
 
       if (game) {
-        if (game.name.includes("(Coming Soon)")) {
-          setCommandLog(prev => [...prev, `⏳ ${game.name} is not yet available. Use 'vote game ${game.id}' to show your interest!`]);
-        } else if (game.type === 'canvas') {
-          setCommandLog(prev => [...prev, `Initializing ${game.name}...`]);
+        // Only handle canvas type now
+        if (game.type === 'canvas') {
+          setCommandLog(prev => [...prev, `Initializing canvas game: ${game.name}...`]);
           setCurrentGameId(game.id);
           setGameMode('game-canvas');
+          // Ensure focus leaves the hidden input when canvas is active
+          setTimeout(() => inputRef.current?.blur(), 0);
         } else {
-          activeGameRef.current = game;
-          setCurrentGameId(game.id);
-          setGameModeSelected(gameModeArg || 'single');
-          setGameMode('game-prestart');
-          setGameState(null);
-          setCommandLog(prevLog => [...prevLog, `Starting ASCII Game: ${game.name}...`]);
+          // This case should technically not happen if types.ts is correct
+          setCommandLog(prevLog => [...prevLog, `Error: Game "${gameId}" is not a canvas game.`]);
         }
       } else {
         setCommandLog(prevLog => [...prevLog, `Error: Game "${gameId}" not found.`]);
       }
-      return;
+      setIsProcessing(false); // Set processing false after attempting to run
+      return; // Ensure we exit after handling 'run game'
     }
 
     setIsProcessing(true);
@@ -655,20 +435,6 @@ export default function Home() {
       setIsProcessing(false);
       return;
     }
-
-    // Comment out modes related to builder/gallery
-    /*
-    if (commandLower === 'build') {
-      setGameMode('build');
-      setIsProcessing(false);
-      return;
-    }
-    if (commandLower === 'gallery') {
-      setGameMode('gallery');
-      setIsProcessing(false);
-      return;
-    }
-    */
 
     if (commandLower === 'tips') {
       setGameMode('tips');
@@ -825,69 +591,44 @@ export default function Home() {
             transition: 'color 0.3s ease-in-out'
           }}
         >
-          {/* Command Log Area (Scrollable, takes up middle space) */}
-          {gameMode === 'command' && (
-            <pre 
-              ref={logContainerRef}
-              className="command-log-area whitespace-pre-wrap"
-            >
-              {/* Render ALL log entries */}
-              {commandLog.map((line, idx) => (
-                <div key={idx}>{line}</div>
-              ))}
-            </pre>
-          )}
+          {/* Command Log Area or Canvas Game Area */}
+          <div className="flex-grow-1 relative z-30 w-full h-full overflow-hidden">
+            {/* Command Log Area (Visible when not in canvas game mode) */}
+            {gameMode !== 'game-canvas' && (
+              <pre
+                ref={logContainerRef}
+                className="command-log-area whitespace-pre-wrap w-full h-full"
+              >
+                {/* Render command log entries */}
+                {commandLog.map((line, idx) => (
+                  <div key={idx}>{line}</div>
+                ))}
+                {/* TODO: Add rendering for other non-game modes like learn, tips here if needed */}
+                {/* Example: 
+                {gameMode === 'learn' && renderLearnMode().map((line, idx) => <div key={idx}>{line}</div>)}
+                {gameMode === 'tips' && renderBuilderTips().map((line, idx) => <div key={idx}>{line}</div>)}
+                */}
+              </pre>
+            )}
 
-          {/* Game Output Area (Takes full space when not in command mode) */}
-          {gameMode !== 'command' && (
-            <div className="flex-grow-1 relative z-30">
-              {gameMode === 'game-prestart' && activeGameRef.current && (
-                <div>
-                   <p>Starting {activeGameRef.current.name}...</p>
-                   <p className="mt-2 text-yellow-400 animate-pulse">[ HIT SPACE BAR TO START ]</p>
-                </div>
-              )}
-              {gameMode === 'game-countdown' && countdown !== null && (
-                 <div className="text-center text-4xl font-bold">
-                    {countdown > 0 ? countdown : "GO!"}
-                 </div>
-              )}
-              {(gameMode === 'game-playing') && gameState && activeGameRef.current && (
-                 <div>
-                    {activeGameRef.current.render(gameState).map((line, idx) => (
-                       <div key={idx}>{line}</div>
-                    ))}
-                 </div>
-              )}
-              {gameMode === 'game-over' && gameState && activeGameRef.current && (
-                 <div className="mt-2">
-                    {/* Render final board state above game over text */}
-                    {activeGameRef.current.render(gameState).map((line, idx) => (
-                       <div key={idx}>{line}</div>
-                    ))}
-                    {/* Game Over Text */}
-                    <div className="mt-2 text-yellow-400">
-                        {activeGameRef.current.gameOverText(gameState).map((line, idx) => (
-                           <div key={idx}>{line}</div>
-                        ))}
-                    </div>
-                 </div>
-              )}
-              {gameMode === 'game-canvas' && currentGameId && (
-                <div className="w-full h-full">
-                  <GameCanvas 
-                    gameId={currentGameId} 
-                    userHandle={userHandle}
-                    onQuit={exitGameMode}
-                  />
-                </div>
-              )}
-            </div>
-          )}
+            {/* Game Canvas Area (Visible only when in canvas game mode) */}
+            {gameMode === 'game-canvas' && currentGameId && userHandle && (
+              <div className="w-full h-full">
+                <GameCanvas
+                  gameId={currentGameId}
+                  userHandle={userHandle}
+                  style={mapThemeToCanvasStyle(selectedTheme)}
+                  onQuit={exitGameMode}
+                />
+              </div>
+            )}
+            
+            {/* Removed JSX blocks for ASCII game modes: game-prestart, game-countdown, game-playing, game-over */}
+          </div>
 
-          {/* Input Line (Pushed to bottom by flexbox) */}
+          {/* Input Line (Visible only in command mode) */}
           {gameMode === 'command' && (
-            <div className="input-line flex items-center">
+            <div className="input-line flex items-center flex-shrink-0">
               <span className="mr-1">&gt;</span>
               {/* Placeholder logic */}
               {currentCommand === '' && isWaitingForHandle ? (

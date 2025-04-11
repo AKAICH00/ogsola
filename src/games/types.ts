@@ -5,23 +5,21 @@
 export type GameState = Record<string, unknown>;
 
 /**
- * Defines the interface for any ASCII game module.
+ * Defines the interface for any Canvas game module.
  */
 export type Game = {
-  /** Unique identifier for the game (e.g., 'pong') */
+  /** Unique identifier for the game (e.g., 'brick-breaker') */
   id: string;
   /** Display name of the game */
   name: string;
   /** Brief description */
   description: string;
-  /** Initializes the game state */
-  init: () => GameState;
-  /** Renders the current game state as an array of strings (terminal lines) */
-  render: (state: GameState) => string[];
-  /** Processes a single key input and returns the new game state */
-  update: (state: GameState, key?: string | null) => GameState;
-  /** Checks if the game has ended based on the state */
-  isOver: (state: GameState) => boolean;
-  /** Provides text to display when the game is over */
-  gameOverText: (state: GameState) => string[];
+  /** Type is always canvas now */
+  type: 'canvas';
+
+  // Removed ASCII-specific methods: init, render, update, isOver, gameOverText
+  // TODO: Define required methods for canvas games (e.g., initializeEngine, destroyEngine?)
+  // These will likely be called by the GameCanvas component.
+  // Placeholder for potential future requirements
+  [key: string]: any; // Allow other properties for now
 }; 
