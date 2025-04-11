@@ -230,7 +230,12 @@ export default function Home() {
 
   const renderTitleBox = () => {
     return (
-      <pre className="relative z-30 mb-4 flex-shrink-0">
+      <pre className="relative z-30 mb-4 flex-shrink-0 font-bold" 
+           style={{ 
+             fontFamily: "'Courier New', monospace",
+             fontSize: '18px',
+             lineHeight: 1.2 
+           }}>
         {`
   ╔════════════════════════════════════════════════════╗
   ║               OG SOLAS TERMINAL                    ║
@@ -281,16 +286,6 @@ export default function Home() {
       '  [Q]            - Quit the current game (usually).',
       '  (Other controls depend on the specific game)'
     ];
-  };
-
-  const cursorStyle = {
-    display: 'inline-block',
-    width: '8px',
-    height: '16px',
-    backgroundColor: dynamicTextColor || undefined,
-    animation: 'blink 1s step-end infinite',
-    verticalAlign: 'middle',
-    marginLeft: '2px'
   };
 
   const keyframes = `
@@ -505,16 +500,16 @@ export default function Home() {
             /* CRT terminal specific styles */
             .terminal-content {
               width: 100%;
-              height: 100%;
+              height: 100%; /* Explicitly set height */
               padding: 60px; /* Padding inside this container */
               box-sizing: border-box;
               overflow: hidden; /* Hide main overflow */
               position: relative; /* For CRT effects */
               font-family: 'Courier New', monospace;
-              font-size: 16px;
+              font-size: 18px;
               line-height: 1.2;
-              display: flex; 
-              flex-direction: column; 
+              display: flex; /* Ensure flex display */
+              flex-direction: column; /* Ensure column direction */
             }
 
             /* Apply CRT effects to this container */
@@ -554,11 +549,25 @@ export default function Home() {
               overflow-y: auto; /* Enable scrolling for the log */
               position: relative; /* Needed for z-index */
               z-index: 30; /* Ensure content is above CRT effects */
+              font-weight: bold; /* Make text bold to match input */
             }
 
             .input-line {
               flex-shrink: 0; /* Prevent input line from shrinking */
               z-index: 30; /* Ensure content is above CRT effects */
+              font-family: 'Courier New', monospace; /* Match terminal font */
+              font-size: 18px; /* Match terminal font size */
+              font-weight: bold; /* Make text bold to match output */
+            }
+            
+            .cursor {
+              display: inline-block;
+              width: 10px;
+              height: 18px;
+              animation: blink 1s step-end infinite;
+              vertical-align: middle;
+              margin-left: 2px;
+              font-weight: bold;
             }
 
             /* Keep brightness indicator fixed to viewport */
@@ -579,72 +588,91 @@ export default function Home() {
 
       {/* Main terminal container - NO PADDING HERE */}
       <div 
-        className="bg-black w-screen h-screen overflow-hidden"
+        className="bg-black w-screen h-screen overflow-hidden flex flex-col"
         style={{ transition: 'color 0.3s ease-in-out' }}
         onWheel={handleWheel}
       >
-        {/* Use terminal-content div for padding, flex layout, and CRT effects */}
+        {/* Terminal content with CRT effects and proper flex layout */}
         <div 
-          className="terminal-content" 
+          className="terminal-content flex-1 flex flex-col" 
           style={{ 
             color: dynamicTextColor || undefined,
             transition: 'color 0.3s ease-in-out'
           }}
         >
-          {/* Command Log Area or Canvas Game Area */}
-          <div className="flex-grow-1 relative z-30 w-full h-full overflow-hidden">
-            {/* Command Log Area (Visible when not in canvas game mode) */}
-            {gameMode !== 'game-canvas' && (
-              <pre
-                ref={logContainerRef}
-                className="command-log-area whitespace-pre-wrap w-full h-full"
-              >
-                {/* Render command log entries */}
-                {commandLog.map((line, idx) => (
-                  <div key={idx}>{line}</div>
-                ))}
-                {/* TODO: Add rendering for other non-game modes like learn, tips here if needed */}
-                {/* Example: 
-                {gameMode === 'learn' && renderLearnMode().map((line, idx) => <div key={idx}>{line}</div>)}
-                {gameMode === 'tips' && renderBuilderTips().map((line, idx) => <div key={idx}>{line}</div>)}
-                */}
-              </pre>
-            )}
+          {/* Command Log Area (Visible when not in canvas game mode) - Takes all available space */}
+          {gameMode !== 'game-canvas' && (
+            <pre
+              ref={logContainerRef}
+              className="command-log-area flex-1 whitespace-pre-wrap overflow-y-auto relative z-30 font-bold"
+            >
+              {/* Render command log entries */}
+              {commandLog.map((line, idx) => (
+                <div key={idx}>{line}</div>
+              ))}
+              {/* TODO: Add rendering for other non-game modes like learn, tips here if needed */}
+            </pre>
+          )}
 
-            {/* Game Canvas Area (Visible only when in canvas game mode) */}
-            {gameMode === 'game-canvas' && currentGameId && userHandle && (
-              <div className="w-full h-full">
-                <GameCanvas
-                  gameId={currentGameId}
-                  userHandle={userHandle}
-                  style={mapThemeToCanvasStyle(selectedTheme)}
-                  onQuit={exitGameMode}
-                />
-              </div>
-            )}
+          {/* Game Canvas Area (Visible only when in canvas game mode) - Takes all available space */}
+          {gameMode === 'game-canvas' && currentGameId && userHandle && (
+            <div className="flex-1 relative z-30">
+              <GameCanvas
+                gameId={currentGameId}
+                userHandle={userHandle}
+                style={mapThemeToCanvasStyle(selectedTheme)}
+                onQuit={exitGameMode}
+              />
+            </div>
+          )}
             
-            {/* Removed JSX blocks for ASCII game modes: game-prestart, game-countdown, game-playing, game-over */}
-          </div>
-
-          {/* Input Line (Visible only in command mode) */}
+          {/* Input Line (Visible only in command mode, now at bottom due to flex layout) */}
           {gameMode === 'command' && (
-            <div className="input-line flex items-center flex-shrink-0">
+            <div className="input-line flex items-center mt-2 flex-shrink-0 font-bold"
+                 style={{ 
+                   fontFamily: "'Courier New', monospace",
+                   fontSize: '18px', 
+                   lineHeight: 1.2 
+                 }}>
               <span className="mr-1">&gt;</span>
               {/* Placeholder logic */}
               {currentCommand === '' && isWaitingForHandle ? (
-                <span className="opacity-60">enter your handle...</span>
+                <span style={{ 
+                  color: dynamicTextColor || undefined, 
+                  fontFamily: "'Courier New', monospace",
+                  fontSize: '18px',
+                  fontWeight: '900'
+                }}>enter your handle...</span>
               ) : currentCommand === '' && !userHandle && commandLog.length <= 1 ? (
-                <span className="opacity-60">type 'start' to begin</span>
+                <span style={{ 
+                  color: dynamicTextColor || undefined, 
+                  fontFamily: "'Courier New', monospace",
+                  fontSize: '18px',
+                  fontWeight: '900'
+                }}>type 'start' to begin</span>
               ) : currentCommand === '' ? (
-                <span className="opacity-60">type a command...</span>
+                <span style={{ 
+                  color: dynamicTextColor || undefined, 
+                  fontFamily: "'Courier New', monospace",
+                  fontSize: '18px',
+                  fontWeight: '900'
+                }}>type a command...</span>
               ) : (
-                <span>{currentCommand}</span>
+                <span style={{ 
+                  fontFamily: "'Courier New', monospace",
+                  fontSize: '18px',
+                  fontWeight: '900'
+                }}>{currentCommand}</span>
               )}
               {/* Blinking Cursor */}
               {isClient && !isProcessing && (
                 <span 
                   className="cursor" 
-                  style={{ backgroundColor: dynamicTextColor || undefined }}
+                  style={{ 
+                    backgroundColor: dynamicTextColor || undefined,
+                    height: '20px',
+                    width: '11px'
+                  }}
                 ></span>
               )}
             </div>
@@ -663,11 +691,17 @@ export default function Home() {
           />
         </div>
 
-        {/* Brightness Indicator (Overlay) */}
+        {/* Brightness Indicator (Fixed Overlay) - Now properly positioned with fixed position */}
         {showBrightnessIndicator && (
           <div 
-            className="brightness-indicator"
-            style={{ color: dynamicTextColor || undefined, transition: 'color 0.3s ease-in-out'}}
+            className="fixed bottom-2 right-2 bg-black bg-opacity-70 px-2 py-1 rounded z-50"
+            style={{ 
+              color: dynamicTextColor || undefined, 
+              transition: 'color 0.3s ease-in-out',
+              fontFamily: "'Courier New', monospace",
+              fontSize: '18px',
+              fontWeight: 'bold'
+            }}
           >
             Brightness: {textBrightness}%
           </div>
